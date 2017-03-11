@@ -1,0 +1,7 @@
+[package]
+name = "raml-parser"
+version = "0.1.0"
+authors = ["dan <daniel.ryan@mergermarket.com>"]
+
+[dependencies]
+yaml-rust = "0.3.5"
