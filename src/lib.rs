@@ -9,8 +9,20 @@ pub fn parse(s: &str) -> Result<Raml, RamlErrors> {
 
     let ref yaml = docs[0];
 
-    let title = yaml["title"].as_str().unwrap();
-    Ok(Raml { title: title.to_string() })
+    let mut raml_errors = RamlErrors::new();
+
+    let title = yaml["title"].as_str();
+
+    if title.is_none() {
+        raml_errors.errors
+            .push(String::from("Error parsing document root. Missing field: title"))
+    }
+
+    if raml_errors.errors.len() > 0 {
+        Err(raml_errors)
+    } else {
+        Ok(Raml { title: title.unwrap().to_string() })
+    }
 }
 
 fn load_yaml(s: &str) -> Result<Vec<Yaml>, RamlErrors> {
@@ -63,7 +75,7 @@ impl RamlErrors {
 }
 
 #[test]
-fn must_error_on_empty_document() {
+fn error_on_empty_document() {
     let s = "";
     let result = parse(s);
     assert_eq!(result.is_err(), true);
@@ -73,7 +85,7 @@ fn must_error_on_empty_document() {
 }
 
 #[test]
-fn must_start_with_version_comment() {
+fn error_for_missing_version_comment() {
     let s = "title: Some API";
     let result = parse(s);
     assert_eq!(result.is_err(), true);
@@ -84,7 +96,7 @@ fn must_start_with_version_comment() {
 }
 
 #[test]
-fn must_error_for_invalid_yaml() {
+fn error_for_invalid_yaml() {
     let s = "%%invalid";
     let result = parse(s);
     assert_eq!(result.is_err(), true);
@@ -97,7 +109,6 @@ fn must_error_for_invalid_yaml() {
 
 #[test]
 fn loads_the_title() {
-    println!("test");
     let s = "#%RAML 1.0
     title: Some API
     ";
@@ -108,5 +119,15 @@ fn loads_the_title() {
     assert_eq!("Some API", raml.title);
 }
 
-
 // todo fail when mandatory title is not set
+#[test]
+fn error_for_missing_title() {
+    let s = "#%RAML 1.0
+    version: v1";
+    let result = parse(s);
+    assert_eq!(result.is_err(), true);
+    let errors = result.err().unwrap().errors;
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0],
+               "Error parsing document root. Missing field: title");
+}
