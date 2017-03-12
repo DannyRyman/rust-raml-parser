@@ -2,13 +2,56 @@ extern crate yaml_rust;
 
 use yaml_rust::{YamlLoader, Yaml};
 
+pub fn parse(s: &str) -> Result<Raml, RamlErrors> {
+    let ref docs = load_yaml(s)?;
+
+    error_if_incorrect_raml_comment(s)?;
+
+    let ref yaml = docs[0];
+
+    let title = yaml["title"].as_str().unwrap();
+    Ok(Raml { title: title.to_string() })
+}
+
+fn load_yaml(s: &str) -> Result<Vec<Yaml>, RamlErrors> {
+    let mut raml_errors = RamlErrors::new();
+    let result = YamlLoader::load_from_str(s);
+    match result {
+        Ok(docs) => {
+            if docs.len() == 0 {
+                raml_errors.errors.push(String::from("Attempted to parse an empty document"));
+                return Err(raml_errors);
+            } else {
+                Ok(docs)
+            }
+        }
+        Err(scan_error) => {
+            raml_errors.errors
+                .push(format!("Invalid yaml: {}", scan_error));
+            Err(raml_errors)
+        } 
+    }
+}
+
+fn error_if_incorrect_raml_comment(s: &str) -> Result<(), RamlErrors> {
+    let first_line: &str = s.lines().next().unwrap_or_default().trim();
+    if first_line != "#%RAML 1.0" {
+        let mut raml_errors = RamlErrors::new();
+        raml_errors.errors
+            .push(String::from("Document must start with the following RAML comment line: \
+                                #%RAML 1.0"));
+        return Err(raml_errors);
+    }
+    Ok(())
+}
+
 #[derive(Debug)]
-struct Raml {
+pub struct Raml {
     title: String,
 }
 
 #[derive(Debug)]
-struct RamlErrors {
+pub struct RamlErrors {
     errors: Vec<String>,
 }
 
@@ -16,40 +59,6 @@ impl RamlErrors {
     pub fn new() -> RamlErrors {
         let errs = Vec::new();
         RamlErrors { errors: errs }
-    }
-}
-
-fn parse(s: &str) -> Result<Raml, RamlErrors> {
-    let mut raml_errors = RamlErrors::new();
-    let ref docs = load_yaml(s)?;
-    if docs.len() == 0 {
-        raml_errors.errors.push(String::from("Attempted to parse an empty document"));
-        return Err(raml_errors);
-    }
-    let first_line: &str = s.lines().next().unwrap_or_default().trim();
-    println!("first_line: {}", first_line);
-    if first_line != "#%RAML 1.0" {
-        raml_errors.errors
-            .push(String::from("Document must start with the following RAML comment line: \
-                                #%RAML 1.0"));
-        return Err(raml_errors);
-    }
-    let ref doc = docs[0];
-    let title = doc["title"].as_str().unwrap();
-    println!("title >>>>>> {0}", title);
-    Ok(Raml { title: title.to_string() })
-}
-
-fn load_yaml(s: &str) -> Result<Vec<Yaml>, RamlErrors> {
-    let result = YamlLoader::load_from_str(s);
-    match result {
-        Ok(yaml) => Ok(yaml),
-        Err(scan_error) => {
-            let mut raml_errors = RamlErrors::new();
-            raml_errors.errors
-                .push(format!("Invalid yaml: {}", scan_error));
-            Err(raml_errors)
-        } 
     }
 }
 
@@ -98,5 +107,6 @@ fn loads_the_title() {
     let raml = result.ok().unwrap();
     assert_eq!("Some API", raml.title);
 }
+
 
 // todo fail when mandatory title is not set
