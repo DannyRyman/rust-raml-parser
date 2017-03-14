@@ -27,18 +27,16 @@ fn parse_document_root(yaml: &Yaml) -> Result<Raml, RamlErrors> {
                     }
                     _ => {
                         // todo better error message
-                        raml_errors.errors
-                            .push(format!("Unexpected field at the document root"))
+                        raml_errors.add_error("Unexpected field at the document root")
                     }
                 }
             }
         }
-        _ => raml_errors.errors.push(String::from("Unexpected YAML format")),
+        _ => raml_errors.add_error("Unexpected YAML format"),
     }
 
     if title.is_none() {
-        raml_errors.errors
-            .push(String::from("Error parsing document root. Missing field: title"))
+        raml_errors.add_error("Error parsing document root. Missing field: title")
     }
 
     if raml_errors.errors.len() > 0 {
@@ -57,15 +55,14 @@ fn load_yaml(s: &str) -> Result<Yaml, RamlErrors> {
     match result {
         Ok(mut docs) => {
             if docs.len() == 0 {
-                raml_errors.errors.push(String::from("Attempted to parse an empty document"));
+                raml_errors.add_error("Attempted to parse an empty document");
                 return Err(raml_errors);
             } else {
                 Ok(docs.pop().unwrap())
             }
         }
         Err(scan_error) => {
-            raml_errors.errors
-                .push(format!("Invalid yaml: {}", scan_error));
+            raml_errors.add_error(format!("Invalid yaml: {}", scan_error).as_str());
             Err(raml_errors)
         } 
     }
@@ -112,5 +109,9 @@ impl RamlErrors {
 
     pub fn errors(&self) -> &Vec<String> {
         &self.errors
+    }
+
+    fn add_error(&mut self, error_message: &str) {
+        self.errors.push(error_message.to_string())
     }
 }
