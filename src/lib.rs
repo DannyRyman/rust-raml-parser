@@ -2,27 +2,29 @@ extern crate yaml_rust;
 
 use yaml_rust::{YamlLoader, Yaml};
 
-pub fn parse(s: &str) -> Result<Raml, RamlErrors> {
-    let ref yaml = load_yaml(s)?;
+pub type RamlResult = Result<Raml, RamlErrors>;
+
+pub fn parse(s: &str) -> RamlResult {
+    let yaml = &(load_yaml(s)?);
 
     error_if_incorrect_raml_comment(s)?;
 
     parse_document_root(yaml)
 }
 
-fn parse_document_root(yaml: &Yaml) -> Result<Raml, RamlErrors> {
+fn parse_document_root(yaml: &Yaml) -> RamlResult {
     let mut raml_errors = RamlErrors::new();
     let mut title: Option<&str> = None;
     let mut version: Option<&str> = None;
 
-    match yaml {
-        &Yaml::Hash(ref h) => {
+    match *yaml {
+        Yaml::Hash(ref h) => {
             for (k, v) in h {
-                match k {
-                    &Yaml::String(ref s) if s == "title" => {
+                match *k {
+                    Yaml::String(ref s) if s == "title" => {
                         title = v.as_str();
                     }
-                    &Yaml::String(ref s) if s == "version" => {
+                    Yaml::String(ref s) if s == "version" => {
                         version = v.as_str();
                     }
                     _ => {
@@ -39,7 +41,7 @@ fn parse_document_root(yaml: &Yaml) -> Result<Raml, RamlErrors> {
         raml_errors.add_error("Error parsing document root. Missing field: title")
     }
 
-    if raml_errors.errors.len() > 0 {
+    if raml_errors.has_errors() {
         Err(raml_errors)
     } else {
         Ok(Raml {
@@ -54,9 +56,9 @@ fn load_yaml(s: &str) -> Result<Yaml, RamlErrors> {
     let result = YamlLoader::load_from_str(s);
     match result {
         Ok(mut docs) => {
-            if docs.len() == 0 {
+            if docs.is_empty() {
                 raml_errors.add_error("Attempted to parse an empty document");
-                return Err(raml_errors);
+                Err(raml_errors)
             } else {
                 Ok(docs.pop().unwrap())
             }
@@ -88,7 +90,7 @@ pub struct Raml {
 
 impl Raml {
     pub fn title(&self) -> &str {
-        &self.title.as_str()
+        self.title.as_str()
     }
 
     pub fn version(self) -> Option<String> {
@@ -96,6 +98,7 @@ impl Raml {
     }
 }
 
+#[derive(Default)]
 #[derive(Debug)]
 pub struct RamlErrors {
     errors: Vec<String>,
@@ -113,5 +116,9 @@ impl RamlErrors {
 
     fn add_error(&mut self, error_message: &str) {
         self.errors.push(error_message.to_string())
+    }
+
+    fn has_errors(&self) -> bool {
+        !&self.errors.is_empty()
     }
 }
