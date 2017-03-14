@@ -3,15 +3,38 @@ extern crate yaml_rust;
 use yaml_rust::{YamlLoader, Yaml};
 
 pub fn parse(s: &str) -> Result<Raml, RamlErrors> {
-    let ref docs = load_yaml(s)?;
+    let ref yaml = load_yaml(s)?;
 
     error_if_incorrect_raml_comment(s)?;
 
-    let ref yaml = docs[0];
+    parse_document_root(yaml)
+}
 
+fn parse_document_root(yaml: &Yaml) -> Result<Raml, RamlErrors> {
     let mut raml_errors = RamlErrors::new();
+    let mut title: Option<&str> = None;
+    let mut version: Option<&str> = None;
 
-    let title = yaml["title"].as_str();
+    match yaml {
+        &Yaml::Hash(ref h) => {
+            for (k, v) in h {
+                match k {
+                    &Yaml::String(ref s) if s == "title" => {
+                        title = v.as_str();
+                    }
+                    &Yaml::String(ref s) if s == "version" => {
+                        version = v.as_str();
+                    }
+                    _ => {
+                        // todo better error message
+                        raml_errors.errors
+                            .push(format!("Unexpected field at the document root"))
+                    }
+                }
+            }
+        }
+        _ => raml_errors.errors.push(String::from("Unexpected YAML format")),
+    }
 
     if title.is_none() {
         raml_errors.errors
@@ -21,20 +44,23 @@ pub fn parse(s: &str) -> Result<Raml, RamlErrors> {
     if raml_errors.errors.len() > 0 {
         Err(raml_errors)
     } else {
-        Ok(Raml { title: title.unwrap().to_string() })
+        Ok(Raml {
+            title: title.unwrap().to_string(),
+            version: version.map(|s| s.to_string()),
+        })
     }
 }
 
-fn load_yaml(s: &str) -> Result<Vec<Yaml>, RamlErrors> {
+fn load_yaml(s: &str) -> Result<Yaml, RamlErrors> {
     let mut raml_errors = RamlErrors::new();
     let result = YamlLoader::load_from_str(s);
     match result {
-        Ok(docs) => {
+        Ok(mut docs) => {
             if docs.len() == 0 {
                 raml_errors.errors.push(String::from("Attempted to parse an empty document"));
                 return Err(raml_errors);
             } else {
-                Ok(docs)
+                Ok(docs.pop().unwrap())
             }
         }
         Err(scan_error) => {
@@ -60,6 +86,7 @@ fn error_if_incorrect_raml_comment(s: &str) -> Result<(), RamlErrors> {
 #[derive(Debug)]
 pub struct Raml {
     title: String,
+    version: Option<String>,
 }
 
 #[derive(Debug)]
@@ -130,4 +157,18 @@ fn error_for_missing_title() {
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0],
                "Error parsing document root. Missing field: title");
+}
+
+#[test]
+fn loads_the_version() {
+    let s = "#%RAML 1.0
+    title: Some API
+    version: v1
+    ";
+    let result = parse(s);
+    println!("result is error: {}", result.is_err());
+    assert_eq!(result.is_ok(), true);
+    let raml = result.ok().unwrap();
+    assert_eq!("Some API", raml.title);
+    assert_eq!("v1", raml.version.unwrap());
 }
