@@ -27,9 +27,12 @@ fn parse_document_root(yaml: &Yaml) -> RamlResult {
                     Yaml::String(ref s) if s == "version" => {
                         version = v.as_str();
                     }
+                    Yaml::String(ref s) => {
+                        raml_errors.add_error(format!("Unexpected field found at the document root: {}", s).as_str())
+                    }
                     _ => {
                         // todo better error message
-                        raml_errors.add_error("Unexpected field at the document root")
+                        raml_errors.add_error("Invalid RAML")
                     }
                 }
             }

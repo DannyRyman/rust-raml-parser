@@ -39,6 +39,16 @@ fn error_for_missing_title() {
 }
 
 #[test]
+fn error_for_unknown_field() {
+    let s = "#%RAML 1.0
+    title: Some API
+    unknown: field";
+    let result = parse(s);
+    assert_error_result(result,
+                        &vec!["Unexpected field found at the document root: unknown"]);
+}
+
+#[test]
 fn loads_the_title() {
     let s = "#%RAML 1.0
     title: Some API";
