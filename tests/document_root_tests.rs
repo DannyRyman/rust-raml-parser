@@ -1,6 +1,7 @@
 extern crate raml_parser;
 
 use raml_parser::parse;
+use raml_parser::Raml;
 use raml_parser::RamlResult;
 
 #[test]
@@ -42,13 +43,9 @@ fn loads_the_title() {
     let s = "#%RAML 1.0
     title: Some API";
     let result = parse(s);
-    println!("result is error: {}", result.is_err());
-    assert_eq!(result.is_ok(), true);
-    let raml = result.ok().unwrap();
+    let raml = assert_ok_and_unwrap(result);
     assert_eq!("Some API", raml.title());
 }
-
-
 
 #[test]
 fn loads_the_version() {
@@ -56,11 +53,13 @@ fn loads_the_version() {
     title: Some API
     version: v1";
     let result = parse(s);
-    println!("result is error: {}", result.is_err());
-    assert_eq!(result.is_ok(), true);
-    let raml = result.ok().unwrap();
-    assert_eq!("Some API", raml.title());
+    let raml = assert_ok_and_unwrap(result);
     assert_eq!("v1", raml.version().unwrap());
+}
+
+fn assert_ok_and_unwrap(result: RamlResult) -> Raml {
+    assert_eq!(result.is_ok(), true);
+    result.ok().unwrap()
 }
 
 fn assert_error_result(result: RamlResult, expected_errors: &Vec<&str>) {

@@ -83,6 +83,7 @@ fn error_if_incorrect_raml_comment(s: &str) -> Result<(), RamlErrors> {
 }
 
 #[derive(Debug)]
+#[derive(PartialEq)]
 pub struct Raml {
     title: String,
     version: Option<String>,
