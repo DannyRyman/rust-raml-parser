@@ -16,6 +16,7 @@ fn parse_document_root(yaml: &Yaml) -> RamlResult {
     let mut raml_errors = RamlErrors::new();
     let mut title: Option<&str> = None;
     let mut version: Option<&str> = None;
+    let mut description: Option<&str> = None;
 
     match *yaml {
         Yaml::Hash(ref h) => {
@@ -27,7 +28,11 @@ fn parse_document_root(yaml: &Yaml) -> RamlResult {
                     Yaml::String(ref s) if s == "version" => {
                         version = v.as_str();
                     }
+                    Yaml::String(ref s) if s == "description" => {
+                        description = v.as_str();
+                    }
                     Yaml::String(ref s) => {
+                        println!("key: {:?}", k);
                         raml_errors.add_error(format!("Unexpected field found at the document root: {}", s).as_str())
                     }
                     _ => {
@@ -50,6 +55,7 @@ fn parse_document_root(yaml: &Yaml) -> RamlResult {
         Ok(Raml {
             title: title.unwrap().to_string(),
             version: version.map(|s| s.to_string()),
+            description: description.map(|s| s.to_string())
         })
     }
 }
@@ -90,6 +96,7 @@ fn error_if_incorrect_raml_comment(s: &str) -> Result<(), RamlErrors> {
 pub struct Raml {
     title: String,
     version: Option<String>,
+    description: Option<String>
 }
 
 impl Raml {
@@ -99,6 +106,10 @@ impl Raml {
 
     pub fn version(self) -> Option<String> {
         self.version
+    }
+
+    pub fn description(self) -> Option<String> {
+        self.description
     }
 }
 

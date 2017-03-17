@@ -67,7 +67,20 @@ fn loads_the_version() {
     assert_eq!("v1", raml.version().unwrap());
 }
 
+#[test]
+fn loads_the_description() {
+    let s = "#%RAML 1.0
+    title: Some API
+    description: Sample description";
+    let result = parse(s);
+    let raml = assert_ok_and_unwrap(result);
+    assert_eq!("Sample description", raml.description().unwrap());
+}
+
 fn assert_ok_and_unwrap(result: RamlResult) -> Raml {
+    if result.is_err() {
+        println!("Unexpected error {:?}", result);
+    }
     assert_eq!(result.is_ok(), true);
     result.ok().unwrap()
 }
