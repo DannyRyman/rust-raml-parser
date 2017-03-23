@@ -1,32 +1,23 @@
 extern crate raml_parser;
 
-use raml_parser::parse;
+// use raml_parser::parse;
+// use raml_parser::Raml;
+// use raml_parser::RamlResult;
+
+use raml_parser::RamlParser;
 use raml_parser::Raml;
 use raml_parser::RamlResult;
 
-#[test]
-fn error_on_empty_document() {
-    let s = "";
-    let result = parse(s);
-    assert_error_result(result, &vec!["Attempted to parse an empty document"]);
+fn parse(s: &str) -> RamlResult {
+    RamlParser::load_from_str(s)
 }
+
 
 #[test]
 fn error_for_missing_version_comment() {
     let s = "title: Some API";
     let result = parse(s);
-    assert_error_result(result,
-                        &vec!["Document must start with the following RAML comment line: #%RAML \
-                               1.0"]);
-}
-
-#[test]
-fn error_for_invalid_yaml() {
-    let s = "%%invalid";
-    let result = parse(s);
-    assert_error_result(result,
-                        &vec!["Invalid yaml: while scanning a directive, could not find \
-                               expected directive name at line 1 column 2"]);
+    assert_error_result(result, "Document must start with the following RAML comment line: #%RAML 1.0");
 }
 
 #[test]
@@ -34,18 +25,7 @@ fn error_for_missing_title() {
     let s = "#%RAML 1.0
     version: v1";
     let result = parse(s);
-    assert_error_result(result,
-                        &vec!["Error parsing document root. Missing field: title"]);
-}
-
-#[test]
-fn error_for_unknown_field() {
-    let s = "#%RAML 1.0
-    title: Some API
-    unknown: field";
-    let result = parse(s);
-    assert_error_result(result,
-                        &vec!["Unexpected field found at the document root: unknown"]);
+    assert_error_result(result, "Error parsing document root. Missing field: title");
 }
 
 #[test]
@@ -77,6 +57,15 @@ fn loads_the_description() {
     assert_eq!("Sample description", raml.description().unwrap());
 }
 
+#[test]
+fn error_for_unknown_field() {
+    let s = "#%RAML 1.0
+title: Some API
+unknown: field";
+    let result = parse(s);
+    assert_error_result(result, "Unexpected field found at the document root: unknown at line 3 column 1");
+}
+
 fn assert_ok_and_unwrap(result: RamlResult) -> Raml {
     if result.is_err() {
         println!("Unexpected error {:?}", result);
@@ -85,9 +74,8 @@ fn assert_ok_and_unwrap(result: RamlResult) -> Raml {
     result.ok().unwrap()
 }
 
-fn assert_error_result(result: RamlResult, expected_errors: &Vec<&str>) {
+fn assert_error_result(result: RamlResult, expected_error: &str) {
     assert_eq!(result.is_err(), true);
     let err = result.err().unwrap();
-    let errors = err.errors();
-    assert_eq!(errors, expected_errors);
+    assert_eq!(err.error(), expected_error);
 }
