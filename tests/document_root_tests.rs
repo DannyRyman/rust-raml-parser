@@ -58,6 +58,16 @@ fn loads_the_description() {
 }
 
 #[test]
+fn loads_the_base_uri() {
+    let s = "#%RAML 1.0
+    title: Some API
+    baseUri: https://some.api.com/{version}";
+    let result = parse(s);
+    let raml = assert_ok_and_unwrap(result);
+    assert_eq!("https://some.api.com/{version}", raml.base_uri().unwrap());
+}
+
+#[test]
 fn error_for_unknown_field() {
     let s = "#%RAML 1.0
 title: Some API

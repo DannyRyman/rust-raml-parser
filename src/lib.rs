@@ -12,10 +12,20 @@ pub type RamlResult = Result<Raml, RamlError>;
 pub struct Raml {
     title: String,
     version: Option<String>,
-    description: Option<String>
+    description: Option<String>,
+    base_uri: Option<String>
 }
 
 impl Raml {
+    fn new () -> Raml {
+        Raml {
+            title: "".to_string(),
+            version: None,
+            description: None,
+            base_uri: None
+        }
+    }
+
     pub fn title(&self) -> &str {
         self.title.as_str()
     }
@@ -26,6 +36,10 @@ impl Raml {
 
     pub fn description(self) -> Option<String> {
         self.description
+    }
+
+    pub fn base_uri(self) -> Option<String> {
+        self.base_uri
     }
 }
 
@@ -61,7 +75,7 @@ impl<'a> RamlParser<'a> {
     pub fn load_from_str(source: &str) -> RamlResult {
         let mut parser = RamlParser {
             scanner: Scanner::new(source.chars()),
-            raml: Raml {title: "".to_string(), version: None, description: None}
+            raml: Raml::new()
         };
 
         parser.error_if_incorrect_raml_comment(source)?;
@@ -110,6 +124,9 @@ impl<'a> RamlParser<'a> {
                                 },
                                 TokenType::Scalar(_, ref v) if v == "description" => {
                                     self.raml.description = Some(self.get_value()?);
+                                },
+                                TokenType::Scalar(_, ref v) if v == "baseUri" => {
+                                    self.raml.base_uri = Some(self.get_value()?);
                                 },
                                 TokenType::Scalar(_, ref v) => {
                                     return Err(RamlError::with_marker(format!("Unexpected field found at the document root: {}", v).as_str(), token.0))
