@@ -4,9 +4,10 @@ extern crate raml_parser;
 // use raml_parser::Raml;
 // use raml_parser::RamlResult;
 
-use raml_parser::RamlParser;
-use raml_parser::Raml;
-use raml_parser::RamlResult;
+// use raml_parser::RamlParser;
+// use raml_parser::Raml;
+// use raml_parser::RamlResult;
+use raml_parser::*;
 
 fn parse(s: &str) -> RamlResult {
     RamlParser::load_from_str(s)
@@ -66,6 +67,50 @@ fn loads_the_base_uri() {
     let raml = assert_ok_and_unwrap(result);
     assert_eq!("https://some.api.com/{version}", raml.base_uri().unwrap());
 }
+
+// todo baseUriParameters
+
+#[test]
+fn loads_the_protocols_ignoring_casing() {
+    let s = "#%RAML 1.0
+    title: Some API
+    protocols: [http, HTTPS]";
+    let result = parse(s);
+    let raml = assert_ok_and_unwrap(result);
+    assert_eq!(vec!(Protocol::Http, Protocol::Https), raml.protocols().unwrap());
+}
+
+#[test]
+fn error_for_empty_protocols() {
+    let s = "#%RAML 1.0
+    title: Some API
+    protocols: []";
+    let result = parse(s);
+    assert_error_result(result, "Error parsing document root. Protocols must not be empty.");
+}
+
+#[test]
+fn error_when_protocols_is_not_array() {
+    let s = "#%RAML 1.0
+title: Some API
+protocols: http";
+    let result = parse(s);
+    assert_error_result(result, "Error parsing document root. Protocols must be an array at line 3 column 12");
+}
+
+#[test]
+fn error_for_unexpected_protocol() {
+    let s = "#%RAML 1.0
+title: Some API
+protocols: [Invalid]";
+    let result = parse(s);
+    assert_error_result(result, "Error parsing document root. Unexpected protocol at line 3 column 13");
+}
+
+/*
+    error_when_protocols_is_not_array
+    error_for_unexpected_protocol
+*/
 
 #[test]
 fn error_for_unknown_field() {
