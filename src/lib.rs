@@ -2,8 +2,8 @@ extern crate yaml_rust;
 
 use yaml_rust::scanner::{Scanner, TokenType, Token, Marker};
 use std::str::Chars;
-
-mod errors;
+use std::fmt::Display;
+use std::fmt;
 
 pub use yaml_rust::scanner::ScanError;
 
@@ -16,9 +16,60 @@ pub enum Protocol {
     Https,
 }
 
-enum ExpectedTokenType {
+#[derive(PartialEq)]
+enum TokenTypeDef {
+    NoToken,
     StreamStart,
+    StreamEnd,
+    VersionDirective,
+    TagDirective,
+    DocumentStart,
+    DocumentEnd,
+    BlockSequenceStart,
     BlockMappingStart,
+    BlockEnd,
+    FlowSequenceStart,
+    FlowSequenceEnd,
+    FlowMappingStart,
+    FlowMappingEnd,
+    BlockEntry,
+    FlowEntry,
+    Key,
+    Value,
+    Alias,
+    Anchor,
+    Tag,
+    Scalar,
+}
+
+impl Display for TokenTypeDef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let printable = match *self {
+            TokenTypeDef::StreamStart => "Stream-Start",
+            TokenTypeDef::BlockMappingStart => "Block-Mapping-Start",
+            TokenTypeDef::Scalar => "Scalar",
+            TokenTypeDef::Alias => "Alias",
+            TokenTypeDef::Anchor => "Ancor",
+            TokenTypeDef::BlockEnd => "Block-End",
+            TokenTypeDef::BlockEntry => "Block-Entry",
+            TokenTypeDef::BlockSequenceStart => "Block-Sequence-Start",
+            TokenTypeDef::DocumentEnd => "Document-End",
+            TokenTypeDef::DocumentStart => "Document-Start",
+            TokenTypeDef::FlowEntry => "Flow-Entry",
+            TokenTypeDef::FlowMappingEnd => "Flow-Mapping-End",
+            TokenTypeDef::FlowMappingStart => "Flow-Mapping-Start",
+            TokenTypeDef::FlowSequenceEnd => "Flow-Sequence-End",
+            TokenTypeDef::FlowSequenceStart => "Flow-Sequence-Start",
+            TokenTypeDef::Key => "Key",
+            TokenTypeDef::NoToken => "No-Token",
+            TokenTypeDef::StreamEnd => "Stream-End",
+            TokenTypeDef::Tag => "Tag",
+            TokenTypeDef::TagDirective => "Tag-Directive",
+            TokenTypeDef::Value => "Value",
+            TokenTypeDef::VersionDirective => "Value-Directive",
+        };
+        write!(f, "{}", printable)
+    }
 }
 
 #[derive(Debug)]
@@ -69,6 +120,8 @@ pub struct RamlError {
     error: String,
 }
 
+
+
 impl RamlError {
     fn new(error: &str) -> RamlError {
         RamlError { error: error.to_string() }
@@ -83,6 +136,77 @@ impl RamlError {
 
     pub fn error(&self) -> &str {
         self.error.as_str()
+    }
+}
+
+enum ErrorDef {
+    UnexpectedDocumentRoot { field: String },
+    UnexpectedEntry {
+        expected: TokenTypeDef,
+        found: TokenTypeDef,
+    },
+    MissingRamlVersion,
+    MissingTitle,
+    UnexpectedProtocol,
+    ProtocolsMustBeArray,
+    MissingProtocols,
+}
+
+fn get_error(error: ErrorDef, marker: Option<Marker>) -> RamlError {
+    let message = match error {
+        ErrorDef::UnexpectedDocumentRoot { field } => {
+            format!("Unexpected field found at the document root: {}", field)
+        }
+        ErrorDef::UnexpectedEntry { expected, found } => {
+            format!("Unexpected entry found. Expected {}, Found {}",
+                    expected,
+                    found)
+        }
+        ErrorDef::MissingRamlVersion => {
+            "Document must start with the following RAML comment line: #%RAML 1.0".to_string()
+        }
+        ErrorDef::MissingTitle => "Error parsing document root. Missing field: title".to_string(),
+        ErrorDef::UnexpectedProtocol => {
+            "Error parsing document root. Unexpected protocol".to_string()
+        }
+        ErrorDef::ProtocolsMustBeArray => {
+            "Error parsing document root. Protocols must be an array".to_string()
+        }
+        ErrorDef::MissingProtocols => {
+            "Error parsing document root. Protocols must not be empty.".to_string()
+        }
+    };
+    match marker {
+        Some(m) => RamlError::with_marker(message.as_str(), m),
+        None => RamlError::new(message.as_str()),
+    }
+}
+
+fn get_token_def(token_type: &TokenType) -> TokenTypeDef {
+    match *token_type {
+        TokenType::NoToken => TokenTypeDef::NoToken,
+        TokenType::StreamStart(_) => TokenTypeDef::StreamStart,
+        TokenType::StreamEnd => TokenTypeDef::StreamEnd,
+        TokenType::VersionDirective(_, _) => TokenTypeDef::VersionDirective,
+        TokenType::TagDirective(_, _) => TokenTypeDef::TagDirective,
+        TokenType::DocumentStart => TokenTypeDef::DocumentStart,
+        TokenType::DocumentEnd => TokenTypeDef::DocumentEnd,
+        TokenType::BlockSequenceStart => TokenTypeDef::BlockSequenceStart,
+        TokenType::BlockMappingStart => TokenTypeDef::BlockMappingStart,
+        TokenType::BlockEnd => TokenTypeDef::BlockEnd,
+        TokenType::FlowSequenceStart => TokenTypeDef::FlowSequenceStart,
+        TokenType::FlowSequenceEnd => TokenTypeDef::FlowSequenceEnd,
+        TokenType::FlowMappingStart => TokenTypeDef::FlowMappingStart,
+        TokenType::FlowMappingEnd => TokenTypeDef::FlowMappingEnd,
+        TokenType::BlockEntry => TokenTypeDef::BlockEntry,
+        TokenType::FlowEntry => TokenTypeDef::FlowEntry,
+        TokenType::Key => TokenTypeDef::Key,
+        TokenType::Value => TokenTypeDef::Value,
+        TokenType::Alias(_) => TokenTypeDef::Alias,
+        TokenType::Anchor(_) => TokenTypeDef::Anchor,
+        TokenType::Tag(_, _) => TokenTypeDef::Tag,
+        TokenType::Scalar(_, _) => TokenTypeDef::Scalar,
+
     }
 }
 
@@ -108,14 +232,14 @@ impl<'a> RamlParser<'a> {
     fn error_if_incorrect_raml_comment(&mut self, s: &str) -> Result<(), RamlError> {
         let first_line: &str = s.lines().next().unwrap_or_default().trim();
         if first_line != "#%RAML 1.0" {
-            return Err(RamlError::new(errors::ERROR_MISSING_RAML_VERSION));
+            return Err(get_error(ErrorDef::MissingRamlVersion, None));
         }
         Ok(())
     }
 
     fn doc_root(&mut self) -> Result<(), RamlError> {
-        self.expect(ExpectedTokenType::StreamStart)?;
-        self.expect(ExpectedTokenType::BlockMappingStart)?;
+        self.expect(TokenTypeDef::StreamStart)?;
+        self.expect(TokenTypeDef::BlockMappingStart)?;
         loop {
             let token = self.next_token();
             match token.1 {
@@ -137,25 +261,33 @@ impl<'a> RamlParser<'a> {
                         TokenType::Scalar(_, ref v) if v == "protocols" => {
                             self.protocols()?;
                         }
-                        TokenType::Scalar(_, ref v) => {
-                            return Err(RamlError::with_marker(format!("Unexpected field found \
-                                                                       at the document root: {}",
-                                                                      v)
-                                                                  .as_str(),
-                                                              token.0))
+                        TokenType::Scalar(_, v) => {
+                            return Err(get_error(ErrorDef::UnexpectedDocumentRoot { field: v },
+                                                 Some(token.0)));
                         }
-                        _ => return Err(RamlError::with_marker("expected scalar key", token.0)),
+                        _ => {
+                            return Err(get_error(ErrorDef::UnexpectedEntry {
+                                                     expected: TokenTypeDef::Scalar,
+                                                     found: get_token_def(&token.1),
+                                                 },
+                                                 Some(token.0)))
+                        }
                     }
                 } 
                 TokenType::BlockEnd => {
                     if self.raml.title.is_empty() {
-                        return Err(RamlError::new("Error parsing document root. Missing field: \
-                                                   title"));
+                        return Err(get_error(ErrorDef::MissingTitle, None));
                     } else {
                         break;
                     }
                 }
-                _ => return Err(RamlError::with_marker("did not find expected <key>", token.0)),
+                _ => {
+                    return Err(get_error(ErrorDef::UnexpectedEntry {
+                                             expected: TokenTypeDef::Scalar,
+                                             found: get_token_def(&token.1),
+                                         },
+                                         Some(token.0)))
+                }
             }
         }
         Ok(())
@@ -177,11 +309,8 @@ impl<'a> RamlParser<'a> {
                                         "http" => protocols.push(Protocol::Http),
                                         "https" => protocols.push(Protocol::Https),
                                         _ => {
-                                            return Err(RamlError::with_marker("Error parsing \
-                                                                               document root. \
-                                                                               Unexpected \
-                                                                               protocol",
-                                                                              token.0))
+                                            return Err(get_error(ErrorDef::UnexpectedProtocol,
+                                                                 Some(token.0)))
                                         }
                                     }
                                 }
@@ -192,25 +321,26 @@ impl<'a> RamlParser<'a> {
                                     break;
                                 }
                                 _ => {
-                                    print!("TOKEN {:?}", token);
                                     return Err(RamlError::new("todo"));
                                 }
                             }
                         }
-                        _ => {
-                            return Err(RamlError::with_marker("Error parsing document root. \
-                                                               Protocols must be an array",
-                                                              token.0))
-                        }
+                        _ => return Err(get_error(ErrorDef::ProtocolsMustBeArray, Some(token.0))),
                     }
                 }
 
             }
-            _ => return Err(RamlError::with_marker("expected value", token.0)),
+            _ => {
+                return Err(get_error(ErrorDef::UnexpectedEntry {
+                                         expected: TokenTypeDef::Value,
+                                         found: get_token_def(&token.1),
+                                     },
+                                     Some(token.0)))
+            }
         }
 
         if protocols.is_empty() {
-            Err(RamlError::new("Error parsing document root. Protocols must not be empty."))
+            Err(get_error(ErrorDef::MissingProtocols, None))
         } else {
             self.raml.protocols = Some(protocols);
             Ok(())
@@ -224,10 +354,22 @@ impl<'a> RamlParser<'a> {
                 let token = self.next_token();
                 match token.1 {
                     TokenType::Scalar(_, ref v) => Ok(v.clone()),
-                    _ => Err(RamlError::with_marker("expected scalar", token.0)),
+                    _ => {
+                        Err(get_error(ErrorDef::UnexpectedEntry {
+                                          expected: TokenTypeDef::Scalar,
+                                          found: get_token_def(&token.1),
+                                      },
+                                      Some(token.0)))
+                    }
                 }
             }
-            _ => Err(RamlError::with_marker("expected value", token.0)),
+            _ => {
+                Err(get_error(ErrorDef::UnexpectedEntry {
+                                  expected: TokenTypeDef::Value,
+                                  found: get_token_def(&token.1),
+                              },
+                              Some(token.0)))
+            }
         }
     }
 
@@ -236,24 +378,17 @@ impl<'a> RamlParser<'a> {
         self.scanner.next().unwrap()
     }
 
-    fn expect(&mut self, expected_token_type: ExpectedTokenType) -> Result<(), RamlError> {
+    fn expect(&mut self, expected_token_type: TokenTypeDef) -> Result<(), RamlError> {
         let token = self.next_token();
-        match expected_token_type {
-            ExpectedTokenType::StreamStart => {
-                if let TokenType::StreamStart(_) = token.1 {
-                    Ok(())
-                } else {
-                    Err(RamlError::with_marker("did not find expected <stream-start>", token.0))
-                }
-            }
-            ExpectedTokenType::BlockMappingStart => {
-                if let TokenType::BlockMappingStart = token.1 {
-                    Ok(())
-                } else {
-                    Err(RamlError::with_marker("did not find expected <block-mapping-start>",
-                                               token.0))
-                }
-            }
+        let found_token_type = get_token_def(&token.1);
+        if found_token_type == expected_token_type {
+            Ok(())
+        } else {
+            Err(get_error(ErrorDef::UnexpectedEntry {
+                              expected: expected_token_type,
+                              found: found_token_type,
+                          },
+                          Some(token.0)))
         }
     }
 }
