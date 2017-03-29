@@ -120,8 +120,6 @@ pub struct RamlError {
     error: String,
 }
 
-
-
 impl RamlError {
     fn new(error: &str) -> RamlError {
         RamlError { error: error.to_string() }
@@ -283,7 +281,7 @@ impl<'a> RamlParser<'a> {
                 }
                 _ => {
                     return Err(get_error(ErrorDef::UnexpectedEntry {
-                                             expected: TokenTypeDef::Scalar,
+                                             expected: TokenTypeDef::Key,
                                              found: get_token_def(&token.1),
                                          },
                                          Some(token.0)))
@@ -295,47 +293,36 @@ impl<'a> RamlParser<'a> {
 
     fn protocols(&mut self) -> Result<(), RamlError> {
         let mut protocols: Vec<Protocol> = vec![];
+        self.expect(TokenTypeDef::Value)?;
+
         let token = self.next_token();
-        match token.1 {
-            TokenType::Value => {
-                let token = self.next_token();
-                loop {
+        loop {
+            match token.1 {
+                TokenType::FlowSequenceStart => {
+                    let token = self.next_token();
                     match token.1 {
-                        TokenType::FlowSequenceStart => {
-                            let token = self.next_token();
-                            match token.1 {
-                                TokenType::Scalar(_, ref v) => {
-                                    match v.to_lowercase().as_str() {
-                                        "http" => protocols.push(Protocol::Http),
-                                        "https" => protocols.push(Protocol::Https),
-                                        _ => {
-                                            return Err(get_error(ErrorDef::UnexpectedProtocol,
-                                                                 Some(token.0)))
-                                        }
-                                    }
-                                }
-                                TokenType::FlowEntry => {
-                                    // ignore
-                                }
-                                TokenType::FlowSequenceEnd => {
-                                    break;
-                                }
+                        TokenType::Scalar(_, ref v) => {
+                            match v.to_lowercase().as_str() {
+                                "http" => protocols.push(Protocol::Http),
+                                "https" => protocols.push(Protocol::Https),
                                 _ => {
-                                    return Err(RamlError::new("todo"));
+                                    return Err(get_error(ErrorDef::UnexpectedProtocol,
+                                                         Some(token.0)))
                                 }
                             }
                         }
-                        _ => return Err(get_error(ErrorDef::ProtocolsMustBeArray, Some(token.0))),
+                        TokenType::FlowEntry => {
+                            // ignore
+                        }
+                        TokenType::FlowSequenceEnd => {
+                            break;
+                        }
+                        _ => {
+                            return Err(RamlError::new("todo"));
+                        }
                     }
                 }
-
-            }
-            _ => {
-                return Err(get_error(ErrorDef::UnexpectedEntry {
-                                         expected: TokenTypeDef::Value,
-                                         found: get_token_def(&token.1),
-                                     },
-                                     Some(token.0)))
+                _ => return Err(get_error(ErrorDef::ProtocolsMustBeArray, Some(token.0))),
             }
         }
 
@@ -348,24 +335,13 @@ impl<'a> RamlParser<'a> {
     }
 
     fn get_value(&mut self) -> Result<String, RamlError> {
+        self.expect(TokenTypeDef::Value)?;
         let token = self.next_token();
         match token.1 {
-            TokenType::Value => {
-                let token = self.next_token();
-                match token.1 {
-                    TokenType::Scalar(_, ref v) => Ok(v.clone()),
-                    _ => {
-                        Err(get_error(ErrorDef::UnexpectedEntry {
-                                          expected: TokenTypeDef::Scalar,
-                                          found: get_token_def(&token.1),
-                                      },
-                                      Some(token.0)))
-                    }
-                }
-            }
+            TokenType::Scalar(_, ref v) => Ok(v.clone()),
             _ => {
                 Err(get_error(ErrorDef::UnexpectedEntry {
-                                  expected: TokenTypeDef::Value,
+                                  expected: TokenTypeDef::Scalar,
                                   found: get_token_def(&token.1),
                               },
                               Some(token.0)))
