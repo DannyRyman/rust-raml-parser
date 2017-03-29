@@ -143,6 +143,10 @@ enum ErrorDef {
         expected: TokenTypeDef,
         found: TokenTypeDef,
     },
+    UnexpectedEntryMulti {
+        expected: Vec<TokenTypeDef>,
+        found: TokenTypeDef,
+    },
     MissingRamlVersion,
     MissingTitle,
     UnexpectedProtocol,
@@ -158,6 +162,14 @@ fn get_error(error: ErrorDef, marker: Option<Marker>) -> RamlError {
         ErrorDef::UnexpectedEntry { expected, found } => {
             format!("Unexpected entry found. Expected {}, Found {}",
                     expected,
+                    found)
+        }
+        ErrorDef::UnexpectedEntryMulti { expected, found } => {
+            let expected_display: String = expected.iter()
+                .fold("".to_string(), |acc, x| acc + &(format!("{}", x)));
+
+            format!("Unexpected entry found. Expected one of {}, Found {}",
+                    expected_display,
                     found)
         }
         ErrorDef::MissingRamlVersion => {
@@ -318,7 +330,13 @@ impl<'a> RamlParser<'a> {
                             break;
                         }
                         _ => {
-                            return Err(RamlError::new("todo"));
+                            return Err(get_error(ErrorDef::UnexpectedEntryMulti {
+                                                     expected: vec![TokenTypeDef::Scalar,
+                                                                    TokenTypeDef::FlowSequenceEnd,
+                                                                    TokenTypeDef::FlowEntry],
+                                                     found: get_token_def(&token.1),
+                                                 },
+                                                 Some(token.0)));
                         }
                     }
                 }
