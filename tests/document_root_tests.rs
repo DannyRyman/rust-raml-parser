@@ -18,7 +18,8 @@ fn parse(s: &str) -> RamlResult {
 fn error_for_missing_version_comment() {
     let s = "title: Some API";
     let result = parse(s);
-    assert_error_result(result, "Document must start with the following RAML comment line: #%RAML 1.0");
+    assert_error_result(result,
+                        "Document must start with the following RAML comment line: #%RAML 1.0");
 }
 
 #[test]
@@ -77,7 +78,8 @@ fn loads_the_protocols_ignoring_casing() {
     protocols: [http, HTTPS]";
     let result = parse(s);
     let raml = assert_ok_and_unwrap(result);
-    assert_eq!(vec!(Protocol::Http, Protocol::Https), raml.protocols().unwrap());
+    assert_eq!(vec![Protocol::Http, Protocol::Https],
+               raml.protocols().unwrap());
 }
 
 #[test]
@@ -86,7 +88,8 @@ fn error_for_empty_protocols() {
     title: Some API
     protocols: []";
     let result = parse(s);
-    assert_error_result(result, "Error parsing document root. Protocols must not be empty.");
+    assert_error_result(result,
+                        "Error parsing document root. Protocols must not be empty.");
 }
 
 #[test]
@@ -95,7 +98,9 @@ fn error_when_protocols_is_not_array() {
 title: Some API
 protocols: http";
     let result = parse(s);
-    assert_error_result(result, "Error parsing document root. Protocols must be an array at line 3 column 12");
+    assert_error_result(result,
+                        "Error parsing document root. Protocols must be an array at line 3 \
+                         column 12");
 }
 
 #[test]
@@ -104,7 +109,29 @@ fn error_for_unexpected_protocol() {
 title: Some API
 protocols: [Invalid]";
     let result = parse(s);
-    assert_error_result(result, "Error parsing document root. Unexpected protocol at line 3 column 13");
+    assert_error_result(result,
+                        "Error parsing document root. Unexpected protocol at line 3 column 13");
+}
+
+#[test]
+fn media_type_single_value() {
+    let s = "#%RAML 1.0
+title: Some API
+mediaType: application/json";
+    let result = parse(s);
+    let raml = assert_ok_and_unwrap(result);
+    assert_eq!(vec!["application/json"], raml.media_types().unwrap());
+}
+
+#[test]
+fn media_type_multiple_values() {
+    let s = "#%RAML 1.0
+title: Some API
+mediaType: [application/json, application/xml]";
+    let result = parse(s);
+    let raml = assert_ok_and_unwrap(result);
+    assert_eq!(vec!["application/json", "application/xml"],
+               raml.media_types().unwrap());
 }
 
 /*
@@ -118,7 +145,8 @@ fn error_for_unknown_field() {
 title: Some API
 unknown: field";
     let result = parse(s);
-    assert_error_result(result, "Unexpected field found at the document root: unknown at line 3 column 1");
+    assert_error_result(result,
+                        "Unexpected field found at the document root: unknown at line 3 column 1");
 }
 
 fn assert_ok_and_unwrap(result: RamlResult) -> Raml {

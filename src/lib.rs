@@ -80,6 +80,7 @@ pub struct Raml {
     description: Option<String>,
     base_uri: Option<String>,
     protocols: Option<Vec<Protocol>>,
+    media_types: Option<Vec<String>>,
 }
 
 impl Raml {
@@ -90,6 +91,7 @@ impl Raml {
             description: None,
             base_uri: None,
             protocols: None,
+            media_types: None,
         }
     }
 
@@ -111,6 +113,10 @@ impl Raml {
 
     pub fn protocols(self) -> Option<Vec<Protocol>> {
         self.protocols
+    }
+
+    pub fn media_types(self) -> Option<Vec<String>> {
+        self.media_types
     }
 }
 
@@ -166,7 +172,9 @@ fn get_error(error: ErrorDef, marker: Option<Marker>) -> RamlError {
         }
         ErrorDef::UnexpectedEntryMulti { expected, found } => {
             let expected_display: String = expected.iter()
-                .fold("".to_string(), |acc, x| acc + &(format!("{}", x)));
+                .fold("".to_string(), |acc, x| {
+                    acc.clone() + if acc.is_empty() { "" } else { "," } + &(format!("{}", x))
+                });
 
             format!("Unexpected entry found. Expected one of {}, Found {}",
                     expected_display,
@@ -271,6 +279,9 @@ impl<'a> RamlParser<'a> {
                         TokenType::Scalar(_, ref v) if v == "protocols" => {
                             self.protocols()?;
                         }
+                        TokenType::Scalar(_, ref v) if v == "mediaType" => {
+                            self.media_types()?;
+                        }
                         TokenType::Scalar(_, v) => {
                             return Err(get_error(ErrorDef::UnexpectedDocumentRoot { field: v },
                                                  Some(token.0)));
@@ -301,6 +312,63 @@ impl<'a> RamlParser<'a> {
             }
         }
         Ok(())
+    }
+
+    fn media_types(&mut self) -> Result<(), RamlError> {
+        self.expect(TokenTypeDef::Value)?;
+        let token = self.next_token();
+        match token.1 {
+            TokenType::Scalar(_, v) => self.raml.media_types = Some(vec![v]),
+            TokenType::FlowSequenceStart => self.raml.media_types = Some(self.get_array_values()?),
+            _ => {
+                return Err(get_error(ErrorDef::UnexpectedEntryMulti {
+                                         expected: vec![TokenTypeDef::Scalar,
+                                                        TokenTypeDef::FlowSequenceStart],
+                                         found: get_token_def(&token.1),
+                                     },
+                                     Some(token.0)))
+            }
+        }
+
+        Ok(())
+    }
+
+    fn get_array_values(&mut self) -> Result<Vec<String>, RamlError> {
+        let mut values = vec![];
+        loop {
+            values.push(self.get_scalar_value()?);
+            let token = self.next_token();
+            match token.1 {
+                TokenType::FlowEntry => {
+                    // ignore
+                }
+                TokenType::FlowSequenceEnd => break,
+                _ => {
+                    return Err(get_error(ErrorDef::UnexpectedEntryMulti {
+                                             expected: vec![TokenTypeDef::FlowEntry,
+                                                            TokenTypeDef::FlowSequenceEnd],
+                                             found: get_token_def(&token.1),
+                                         },
+                                         Some(token.0)))
+                }
+            }
+        }
+
+        Ok(values)
+    }
+
+    fn get_scalar_value(&mut self) -> Result<String, RamlError> {
+        let token = self.next_token();
+        match token.1 {
+            TokenType::Scalar(_, ref v) => Ok(v.clone()),
+            _ => {
+                Err(get_error(ErrorDef::UnexpectedEntry {
+                                  expected: TokenTypeDef::Scalar,
+                                  found: get_token_def(&token.1),
+                              },
+                              Some(token.0)))
+            }
+        }
     }
 
     fn protocols(&mut self) -> Result<(), RamlError> {
