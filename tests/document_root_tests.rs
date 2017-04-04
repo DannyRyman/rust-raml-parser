@@ -85,11 +85,11 @@ fn loads_the_protocols_ignoring_casing() {
 #[test]
 fn error_for_empty_protocols() {
     let s = "#%RAML 1.0
-    title: Some API
-    protocols: []";
+title: Some API
+protocols: []";
     let result = parse(s);
     assert_error_result(result,
-                        "Error parsing document root. Protocols must not be empty.");
+                        "Error parsing document root. Protocols must not be empty");
 }
 
 #[test]
@@ -99,8 +99,8 @@ title: Some API
 protocols: http";
     let result = parse(s);
     assert_error_result(result,
-                        "Error parsing document root. Protocols must be an array at line 3 \
-                         column 12");
+                        "Unexpected entry found. Expected Flow-Sequence-Start, Found Scalar at \
+                         line 3 column 12");
 }
 
 #[test]
@@ -132,6 +132,15 @@ mediaType: [application/json, application/xml]";
     let raml = assert_ok_and_unwrap(result);
     assert_eq!(vec!["application/json", "application/xml"],
                raml.media_types().unwrap());
+}
+
+#[test]
+fn no_media_type_must_result_in_none() {
+    let s = "#%RAML 1.0
+title: Some API";
+    let result = parse(s);
+    let raml = assert_ok_and_unwrap(result);
+    println!("media_types {:?}", raml.media_types());
 }
 
 /*
