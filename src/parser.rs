@@ -1,7 +1,8 @@
 use yaml_rust::scanner::{Scanner, TokenType, Token, Marker};
 use std::str::Chars;
-use error_definitions::{ErrorDef, RamlError, get_error};
+use error_definitions::{ErrorDef, RamlError, get_error, HierarchyLevel};
 use token_type_definitions::{TokenTypeDef, get_token_def};
+use std::collections::HashMap;
 
 pub type RamlResult = Result<Raml, RamlError>;
 
@@ -21,9 +22,40 @@ pub struct Raml {
     base_uri: Option<String>,
     protocols: Option<Vec<Protocol>>,
     media_types: Option<Vec<String>>,
+    documentation: Option<Vec<RamlDocumentation>>,
+}
+
+struct KeyValue {
+    key: String,
+    value: String,
+}
+
+#[derive(Debug)]
+#[derive(PartialEq)]
+pub struct RamlDocumentation {
+    title: String,
+    content: String,
+}
+
+impl RamlDocumentation {
+    pub fn new(title: String, content: String) -> RamlDocumentation {
+        RamlDocumentation {
+            title: title,
+            content: content,
+        }
+    }
 }
 
 type FlowSequenceEntries = Vec<FlowSequenceEntry>;
+
+type BlockSequenceEntries = HashMap<String, BlockSequenceEntry>;
+
+struct BlockSequenceEntry {
+    value: String,
+    marker: Marker,
+}
+
+type VectorOfBlockSequenceEntries = Vec<BlockSequenceEntries>;
 
 struct FlowSequenceEntry {
     value: String,
@@ -39,6 +71,7 @@ impl Raml {
             base_uri: None,
             protocols: None,
             media_types: None,
+            documentation: None,
         }
     }
 
@@ -65,6 +98,10 @@ impl Raml {
     pub fn media_types(self) -> Option<Vec<String>> {
         self.media_types
     }
+
+    pub fn documentation(self) -> Option<Vec<RamlDocumentation>> {
+        self.documentation
+    }
 }
 
 pub struct RamlParser<'a> {
@@ -73,6 +110,15 @@ pub struct RamlParser<'a> {
 }
 
 impl<'a> RamlParser<'a> {
+    pub fn debug(source: &str) {
+        let mut parser = RamlParser {
+            scanner: Scanner::new(source.chars()),
+            raml: Raml::new(),
+        };
+
+        parser.print_tokens();
+    }
+
     pub fn load_from_str(source: &str) -> RamlResult {
         let mut parser = RamlParser {
             scanner: Scanner::new(source.chars()),
@@ -84,6 +130,16 @@ impl<'a> RamlParser<'a> {
         parser.doc_root()?;
 
         Ok(parser.raml)
+    }
+
+    fn print_tokens(&mut self) {
+        loop {
+            let token = self.next_token();
+            println!("Token {:?}", token.1);
+            if let TokenType::StreamEnd = token.1 {
+                break;
+            }
+        }
     }
 
     fn error_if_incorrect_raml_comment(&mut self, s: &str) -> Result<(), RamlError> {
@@ -137,8 +193,43 @@ impl<'a> RamlParser<'a> {
                                 .map(|e| e.value.clone())
                                 .collect());
                         }
+                        TokenType::Scalar(_, ref v) if v == "documentation" => {
+                            let documentation_result: Result<Vec<RamlDocumentation>, RamlError> =
+                                self.get_multiple_sets_of_values()?
+                                    .iter()
+                                    .map(|s| {
+                                        let mut title: Option<String> = None;
+                                        let mut content: Option<String> = None;
+                                        for (key, entry) in s {
+                                            println!("***** {}: {}", key, entry.value);
+                                            if key == "title" {
+                                                title = Some(entry.value.clone())
+                                            } else if key == "content" {
+                                                content = Some(entry.value.clone())
+                                            } else {
+                                                println!("unexpected key: {}", key);
+                                                return Err(get_error(ErrorDef::UnexpectedKeyRoot {
+                                                field: key.to_string(),
+                                                level: HierarchyLevel::Documentation,
+                                            }, Some(entry.marker)));
+                                            }
+                                        }
+                                        if title.is_none() {
+                                            return Err(get_error(ErrorDef::MissingField {field: "title".to_string(), level: HierarchyLevel::Documentation}, None));
+                                        }
+                                        Ok(RamlDocumentation {
+                                            title: title.unwrap(),
+                                            content: content.unwrap(),
+                                        })
+                                    })
+                                    .collect();
+                            self.raml.documentation = Some(documentation_result?);
+                        }
                         TokenType::Scalar(_, v) => {
-                            return Err(get_error(ErrorDef::UnexpectedDocumentRoot { field: v },
+                            return Err(get_error(ErrorDef::UnexpectedKeyRoot {
+                                                     field: v,
+                                                     level: HierarchyLevel::DocumentRoot,
+                                                 },
                                                  Some(token.0)));
                         }
                         _ => {
@@ -152,7 +243,11 @@ impl<'a> RamlParser<'a> {
                 } 
                 TokenType::BlockEnd => {
                     if self.raml.title.is_empty() {
-                        return Err(get_error(ErrorDef::MissingTitle, None));
+                        return Err(get_error(ErrorDef::MissingField {
+                                                 field: "title".to_string(),
+                                                 level: HierarchyLevel::DocumentRoot,
+                                             },
+                                             None));
                     } else {
                         break;
                     }
@@ -196,6 +291,77 @@ impl<'a> RamlParser<'a> {
         self.expect(TokenTypeDef::Value)?;
         self.expect(TokenTypeDef::FlowSequenceStart)?;
         self.get_flow_sequence()
+    }
+
+    fn get_multiple_sets_of_values(&mut self) -> Result<VectorOfBlockSequenceEntries, RamlError> {
+        self.expect(TokenTypeDef::Value)?;
+        self.expect(TokenTypeDef::BlockSequenceStart)?;
+        self.get_block_sequences()
+    }
+
+    fn get_block_sequences(&mut self) -> Result<VectorOfBlockSequenceEntries, RamlError> {
+        let mut result: VectorOfBlockSequenceEntries = Vec::new();
+        loop {
+            let token = self.next_token();
+            match token.1 {
+                TokenType::BlockEntry => {
+                    let block_sequence = self.get_block_sequence()?;
+                    result.push(block_sequence);
+                }
+                TokenType::BlockEnd => {
+                    break;
+                }
+                _ => {
+                    return Err(get_error(ErrorDef::UnexpectedEntryMulti {
+                                             expected: vec![TokenTypeDef::BlockEntry,
+                                                            TokenTypeDef::BlockEnd],
+                                             found: get_token_def(&token.1),
+                                         },
+                                         Some(token.0)))
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    fn get_block_sequence(&mut self) -> Result<BlockSequenceEntries, RamlError> {
+        let mut result: BlockSequenceEntries = HashMap::new();
+        self.expect(TokenTypeDef::BlockMappingStart)?;
+        loop {
+            let token = self.next_token();
+            match token.1 {
+                TokenType::Key => {
+                    let key_value = self.get_key_value()?;
+                    result.insert(key_value.key,
+                                  BlockSequenceEntry {
+                                      value: key_value.value,
+                                      marker: token.0,
+                                  });
+                }
+                TokenType::BlockEnd => {
+                    break;
+                }
+                _ => {
+                    return Err(get_error(ErrorDef::UnexpectedEntryMulti {
+                                             expected: vec![TokenTypeDef::Key,
+                                                            TokenTypeDef::BlockEnd],
+                                             found: get_token_def(&token.1),
+                                         },
+                                         Some(token.0)))
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    fn get_key_value(&mut self) -> Result<KeyValue, RamlError> {
+        let key = self.get_scalar_value()?;
+        self.expect(TokenTypeDef::Value)?;
+        let value = self.get_scalar_value()?;
+        Ok(KeyValue {
+            key: key,
+            value: value,
+        })
     }
 
     fn get_flow_sequence(&mut self) -> Result<FlowSequenceEntries, RamlError> {
@@ -249,6 +415,8 @@ impl<'a> RamlParser<'a> {
     fn next_token(&mut self) -> Token {
         // todo error handling
         self.scanner.next().unwrap()
+        // let token_def = get_token_def(&token.1);
+        // println!("Token {}", token_def);
     }
 
     fn expect(&mut self, expected_token_type: TokenTypeDef) -> Result<(), RamlError> {

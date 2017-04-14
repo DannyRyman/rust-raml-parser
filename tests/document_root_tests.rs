@@ -1,18 +1,10 @@
 extern crate raml_parser;
 
-// use raml_parser::parse;
-// use raml_parser::Raml;
-// use raml_parser::RamlResult;
-
-// use raml_parser::RamlParser;
-// use raml_parser::Raml;
-// use raml_parser::RamlResult;
 use raml_parser::*;
 
 fn parse(s: &str) -> RamlResult {
     RamlParser::load_from_str(s)
 }
-
 
 #[test]
 fn error_for_missing_version_comment() {
@@ -140,13 +132,94 @@ fn no_media_type_must_result_in_none() {
 title: Some API";
     let result = parse(s);
     let raml = assert_ok_and_unwrap(result);
-    println!("media_types {:?}", raml.media_types());
+    assert_eq!(None, raml.media_types());
 }
 
-/*
-    error_when_protocols_is_not_array
-    error_for_unexpected_protocol
-*/
+#[test]
+fn loads_the_documentation() {
+    let s = "#%RAML 1.0
+title: Some API
+documentation:
+ - title: Doc Title
+   content: Doc Content";
+
+    let result = parse(s);
+    let raml = assert_ok_and_unwrap(result);
+    assert_eq!(vec![RamlDocumentation::new("Doc Title".to_string(), "Doc Content".to_string())],
+               raml.documentation().unwrap());
+}
+
+#[test]
+fn loads_multiple_documents() {
+    let s = "#%RAML 1.0
+title: Some API
+documentation:
+ - title: Doc Title
+   content: Doc Content
+ - title: Doc Title2
+   content: Doc Content2";
+
+    let expected = vec![RamlDocumentation::new("Doc Title".to_string(), "Doc Content".to_string()),
+                        RamlDocumentation::new("Doc Title2".to_string(),
+                                               "Doc Content2".to_string())];
+
+    let result = parse(s);
+    let raml = assert_ok_and_unwrap(result);
+    assert_eq!(expected, raml.documentation().unwrap());
+}
+
+#[test]
+fn error_for_empty_documentation() {
+    let s = "#%RAML 1.0
+title: Some API
+documentation:";
+    let result = parse(s);
+    assert_error_result(result,
+                        "Unexpected entry found. Expected Block-Sequence-Start, Found Block-End \
+                         at line 4 column 1")
+}
+
+#[test]
+fn documentation_content_over_multiple_lines() {
+    let s = "#%RAML 1.0
+title: Some API
+documentation:
+ - title: Doc Title
+   content: Here is some content
+            over multiple lines";
+
+    let result = parse(s);
+    let raml = assert_ok_and_unwrap(result);
+    assert_eq!(vec![RamlDocumentation::new("Doc Title".to_string(),
+                                           "Here is some content over multiple lines"
+                                               .to_string())],
+               raml.documentation().unwrap());
+}
+
+#[test]
+fn error_for_unexpected_documentation_key() {
+    let s = "#%RAML 1.0
+title: Some API
+documentation:
+ - title1: Doc title
+   content: Doc Content";
+    let result = parse(s);
+    assert_error_result(result,
+                        "Unexpected field found at the documentation: title1 at line 4 column 4")
+}
+
+#[test]
+fn error_missing_documentation_title() {
+    let s = "#%RAML 1.0
+title: Some API
+documentation:
+ - content: Doc Content";
+    let result = parse(s);
+    assert_error_result(result, "Error parsing documentation. Missing field: title")
+}
+
+// Missing title
+// Missing content
 
 #[test]
 fn error_for_unknown_field() {

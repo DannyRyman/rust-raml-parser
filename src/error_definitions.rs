@@ -1,9 +1,29 @@
 use token_type_definitions::TokenTypeDef;
 use yaml_rust::scanner::{Marker, ScanError};
+use std::fmt;
+
+#[derive(Debug)]
+pub enum HierarchyLevel {
+    DocumentRoot,
+    Documentation,
+}
+
+impl fmt::Display for HierarchyLevel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let printable = match *self {
+            HierarchyLevel::DocumentRoot => "document root",
+            HierarchyLevel::Documentation => "documentation",
+        };
+        write!(f, "{}", printable)
+    }
+}
 
 #[derive(Debug)]
 pub enum ErrorDef {
-    UnexpectedDocumentRoot { field: String },
+    UnexpectedKeyRoot {
+        field: String,
+        level: HierarchyLevel,
+    },
     UnexpectedEntry {
         expected: TokenTypeDef,
         found: TokenTypeDef,
@@ -13,7 +33,10 @@ pub enum ErrorDef {
         found: TokenTypeDef,
     },
     MissingRamlVersion,
-    MissingTitle,
+    MissingField {
+        field: String,
+        level: HierarchyLevel,
+    },
     UnexpectedProtocol,
     MissingProtocols,
 }
@@ -43,8 +66,8 @@ impl RamlError {
 
 pub fn get_error(error: ErrorDef, marker: Option<Marker>) -> RamlError {
     let message = match error {
-        ErrorDef::UnexpectedDocumentRoot { field } => {
-            format!("Unexpected field found at the document root: {}", field)
+        ErrorDef::UnexpectedKeyRoot { field, level } => {
+            format!("Unexpected field found at the {}: {}", level, field)
         }
         ErrorDef::UnexpectedEntry { expected, found } => {
             format!("Unexpected entry found. Expected {}, Found {}",
@@ -64,7 +87,9 @@ pub fn get_error(error: ErrorDef, marker: Option<Marker>) -> RamlError {
         ErrorDef::MissingRamlVersion => {
             "Document must start with the following RAML comment line: #%RAML 1.0".to_string()
         }
-        ErrorDef::MissingTitle => "Error parsing document root. Missing field: title".to_string(),
+        ErrorDef::MissingField { field, level } => {
+            format!("Error parsing {}. Missing field: {}", level, field)
+        }
         ErrorDef::UnexpectedProtocol => {
             "Error parsing document root. Unexpected protocol".to_string()
         }
