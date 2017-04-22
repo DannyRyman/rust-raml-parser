@@ -172,58 +172,13 @@ impl<'a> RamlParser<'a> {
                             self.raml.base_uri = Some(self.get_single_value()?);
                         }
                         TokenType::Scalar(_, ref v) if v == "protocols" => {
-                            let protocols = self.get_multiple_values()?;
-                            if protocols.is_empty() {
-                                return Err(get_error(ErrorDef::MissingProtocols, None));
-                            }
-                            let protocols: Result<Vec<Protocol>, RamlError> = protocols.iter()
-                                .map(|p| match p.value.to_lowercase().as_str() {
-                                    "http" => Ok(Protocol::Http),
-                                    "https" => Ok(Protocol::Https),
-                                    _ => {
-                                        Err(get_error(ErrorDef::UnexpectedProtocol, Some(p.marker)))
-                                    }
-                                })
-                                .collect();
-                            self.raml.protocols = Some(protocols?);
+                            self.raml.protocols = Some(self.get_protocols()?);
                         }
                         TokenType::Scalar(_, ref v) if v == "mediaType" => {
-                            self.raml.media_types = Some(self.get_single_or_multiple_values()?
-                                .iter()
-                                .map(|e| e.value.clone())
-                                .collect());
+                            self.raml.media_types = Some(self.get_media_types()?);
                         }
                         TokenType::Scalar(_, ref v) if v == "documentation" => {
-                            let documentation_result: Result<Vec<RamlDocumentation>, RamlError> =
-                                self.get_multiple_sets_of_values()?
-                                    .iter()
-                                    .map(|s| {
-                                        let mut title: Option<String> = None;
-                                        let mut content: Option<String> = None;
-                                        for (key, entry) in s {
-                                            println!("***** {}: {}", key, entry.value);
-                                            if key == "title" {
-                                                title = Some(entry.value.clone())
-                                            } else if key == "content" {
-                                                content = Some(entry.value.clone())
-                                            } else {
-                                                println!("unexpected key: {}", key);
-                                                return Err(get_error(ErrorDef::UnexpectedKeyRoot {
-                                                field: key.to_string(),
-                                                level: HierarchyLevel::Documentation,
-                                            }, Some(entry.marker)));
-                                            }
-                                        }
-                                        if title.is_none() {
-                                            return Err(get_error(ErrorDef::MissingField {field: "title".to_string(), level: HierarchyLevel::Documentation}, None));
-                                        }
-                                        Ok(RamlDocumentation {
-                                            title: title.unwrap(),
-                                            content: content.unwrap(),
-                                        })
-                                    })
-                                    .collect();
-                            self.raml.documentation = Some(documentation_result?);
+                            self.raml.documentation = Some(self.get_documentation()?);
                         }
                         TokenType::Scalar(_, v) => {
                             return Err(get_error(ErrorDef::UnexpectedKeyRoot {
@@ -262,6 +217,69 @@ impl<'a> RamlParser<'a> {
             }
         }
         Ok(())
+    }
+
+    fn get_protocols(&mut self) -> Result<Vec<Protocol>, RamlError> {
+        let protocols = self.get_multiple_values()?;
+        if protocols.is_empty() {
+            return Err(get_error(ErrorDef::MissingProtocols, None));
+        }
+        let protocols: Result<Vec<Protocol>, RamlError> = protocols.iter()
+            .map(|p| match p.value.to_lowercase().as_str() {
+                "http" => Ok(Protocol::Http),
+                "https" => Ok(Protocol::Https),
+                _ => Err(get_error(ErrorDef::UnexpectedProtocol, Some(p.marker))),
+            })
+            .collect();
+
+        Ok(protocols?)
+    }
+
+    fn get_media_types(&mut self) -> Result<Vec<String>, RamlError> {
+        let media_types = self.get_single_or_multiple_values()?
+            .iter()
+            .map(|e| e.value.clone())
+            .collect();
+        Ok(media_types)
+    }
+
+    fn get_documentation(&mut self) -> Result<Vec<RamlDocumentation>, RamlError> {
+        let documentation_result: Result<Vec<RamlDocumentation>, RamlError> =
+            self.get_multiple_sets_of_values()?
+                .iter()
+                .map(|s| {
+                    let mut title: Option<String> = None;
+                    let mut content: Option<String> = None;
+                    for (key, entry) in s {
+                        println!("***** {}: {}", key, entry.value);
+                        if key == "title" {
+                            title = Some(entry.value.clone())
+                        } else if key == "content" {
+                            content = Some(entry.value.clone())
+                        } else {
+                            println!("unexpected key: {}", key);
+                            return Err(get_error(ErrorDef::UnexpectedKeyRoot {
+                                                     field: key.to_string(),
+                                                     level: HierarchyLevel::Documentation,
+                                                 },
+                                                 Some(entry.marker)));
+                        }
+                    }
+                    if title.is_none() {
+                        return Err(get_error(ErrorDef::MissingField {
+                                                 field: "title".to_string(),
+                                                 level: HierarchyLevel::Documentation,
+                                             },
+                                             None));
+                    }
+                    Ok(RamlDocumentation {
+                        title: title.unwrap(),
+                        content: content.unwrap(),
+                    })
+                })
+                .collect();
+
+        Ok(documentation_result?)
     }
 
     fn get_single_or_multiple_values(&mut self) -> Result<FlowSequenceEntries, RamlError> {
