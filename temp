@@ -1,0 +1,22 @@
+Token StreamStart(Utf8)
+Token BlockMappingStart
+Token Key
+Token Scalar(Plain, "title")
+Token Value
+Token Scalar(Plain, "Some API")
+Token Key
+Token Scalar(Plain, "securitySchemes")
+Token Value
+Token BlockMappingStart
+Token Key
+Token Scalar(Plain, "oauth_2_0")
+Token Value
+Token BlockMappingStart
+Token Key
+Token Scalar(Plain, "type")
+Token Value
+Token Scalar(Plain, "OAuth 2.0")
+Token BlockEnd
+Token BlockEnd
+Token BlockEnd
+Token StreamEnd

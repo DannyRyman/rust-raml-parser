@@ -39,6 +39,7 @@ pub enum ErrorDef {
     },
     UnexpectedProtocol,
     MissingProtocols,
+    InvalidSecuritySchemeType,
 }
 
 #[derive(Default)]
@@ -95,6 +96,9 @@ pub fn get_error(error: ErrorDef, marker: Option<Marker>) -> RamlError {
         }
         ErrorDef::MissingProtocols => {
             "Error parsing document root. Protocols must not be empty".to_string()
+        }
+        ErrorDef::InvalidSecuritySchemeType => {
+            "Error parsing security scheme. Unexpected type".to_string()
         }
     };
     match marker {

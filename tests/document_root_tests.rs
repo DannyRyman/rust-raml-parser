@@ -1,10 +1,12 @@
+#![cfg_attr(test, allow(dead_code))]
+
 extern crate raml_parser;
 
 use raml_parser::*;
 
-fn parse(s: &str) -> RamlResult {
-    RamlParser::load_from_str(s)
-}
+mod common;
+
+use common::*;
 
 #[test]
 fn error_for_missing_version_comment() {
@@ -229,18 +231,4 @@ unknown: field";
     let result = parse(s);
     assert_error_result(result,
                         "Unexpected field found at the document root: unknown at line 3 column 1");
-}
-
-fn assert_ok_and_unwrap(result: RamlResult) -> Raml {
-    if result.is_err() {
-        println!("Unexpected error {:?}", result);
-    }
-    assert_eq!(result.is_ok(), true);
-    result.ok().unwrap()
-}
-
-fn assert_error_result(result: RamlResult, expected_error: &str) {
-    assert_eq!(result.is_err(), true);
-    let err = result.err().unwrap();
-    assert_eq!(err.error(), expected_error);
 }

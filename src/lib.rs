@@ -4,4 +4,4 @@ mod token_type_definitions;
 mod error_definitions;
 mod parser;
 
-pub use parser::{Protocol, Raml, RamlParser, RamlResult, RamlDocumentation};
+pub use parser::{Protocol, Raml, RamlParser, RamlResult, RamlDocumentation, SecuritySchemeType};

@@ -1,5 +1,5 @@
 use yaml_rust::scanner::{Scanner, TokenType, Token, Marker};
-use std::str::Chars;
+use std::str::{Chars, FromStr};
 use error_definitions::{ErrorDef, RamlError, get_error, HierarchyLevel};
 use token_type_definitions::{TokenTypeDef, get_token_def};
 use std::collections::HashMap;
@@ -23,6 +23,7 @@ pub struct Raml {
     protocols: Option<Vec<Protocol>>,
     media_types: Option<Vec<String>>,
     documentation: Option<Vec<RamlDocumentation>>,
+    security_schemes: Option<SecuritySchemes>,
 }
 
 struct KeyValue {
@@ -48,6 +49,41 @@ impl RamlDocumentation {
 
 type FlowSequenceEntries = Vec<FlowSequenceEntry>;
 
+pub type SecuritySchemes = HashMap<String, SecurityScheme>;
+
+#[derive(Debug)]
+#[derive(PartialEq)]
+pub enum SecuritySchemeType {
+    OAuth1,
+    OAuth2,
+    BasicAuthentication,
+    DigestAuthentication,
+    PassThrough,
+    XOther(String),
+}
+
+impl FromStr for SecuritySchemeType {
+    type Err = RamlError;
+
+    fn from_str(s: &str) -> Result<SecuritySchemeType, RamlError> {
+        match s.to_lowercase().as_str() {
+            "oauth 1.0" => Ok(SecuritySchemeType::OAuth1),
+            "oauth 2.0" => Ok(SecuritySchemeType::OAuth2),
+            "basic authentication" => Ok(SecuritySchemeType::BasicAuthentication),
+            "digest authentication" => Ok(SecuritySchemeType::DigestAuthentication),
+            "pass through" => Ok(SecuritySchemeType::PassThrough),
+            ref s if s.starts_with("x-") => Ok(SecuritySchemeType::XOther(s.to_string())),
+            _ => Err(get_error(ErrorDef::InvalidSecuritySchemeType, None)),
+        }
+    }
+}
+
+#[derive(PartialEq)]
+#[derive(Debug)]
+pub struct SecurityScheme {
+    pub security_type: SecuritySchemeType,
+}
+
 type BlockSequenceEntries = HashMap<String, BlockSequenceEntry>;
 
 struct BlockSequenceEntry {
@@ -72,6 +108,7 @@ impl Raml {
             protocols: None,
             media_types: None,
             documentation: None,
+            security_schemes: None,
         }
     }
 
@@ -101,6 +138,10 @@ impl Raml {
 
     pub fn documentation(self) -> Option<Vec<RamlDocumentation>> {
         self.documentation
+    }
+
+    pub fn security_schemes(self) -> Option<SecuritySchemes> {
+        self.security_schemes
     }
 }
 
@@ -179,6 +220,9 @@ impl<'a> RamlParser<'a> {
                         }
                         TokenType::Scalar(_, ref v) if v == "documentation" => {
                             self.raml.documentation = Some(self.get_documentation()?);
+                        }
+                        TokenType::Scalar(_, ref v) if v == "securitySchemes" => {
+                            self.raml.security_schemes = Some(self.get_security_schemes()?);
                         }
                         TokenType::Scalar(_, v) => {
                             return Err(get_error(ErrorDef::UnexpectedKeyRoot {
@@ -280,6 +324,113 @@ impl<'a> RamlParser<'a> {
                 .collect();
 
         Ok(documentation_result?)
+    }
+
+    fn get_security_schemes(&mut self) -> Result<SecuritySchemes, RamlError> {
+        let mut result: SecuritySchemes = HashMap::new();
+        self.expect(TokenTypeDef::Value)?;
+        self.expect(TokenTypeDef::BlockMappingStart)?;
+
+        loop {
+            let token = self.next_token();
+            match token.1 {
+                TokenType::Key => {
+                    let token = self.next_token();
+                    match token.1 {
+                        TokenType::Scalar(_, v) => {
+                            result.insert(v, self.get_security_scheme()?);
+                        }
+                        _ => {
+                            return Err(get_error(ErrorDef::UnexpectedEntry {
+                                                     expected: TokenTypeDef::Scalar,
+                                                     found: get_token_def(&token.1),
+                                                 },
+                                                 Some(token.0)))
+                        }
+                    }
+                }
+                TokenType::BlockEnd => {
+                    if self.raml.title.is_empty() {
+                        return Err(get_error(ErrorDef::MissingField {
+                                                 field: "title".to_string(),
+                                                 level: HierarchyLevel::DocumentRoot,
+                                             },
+                                             None));
+                    } else {
+                        break;
+                    }
+                }
+                _ => {
+                    return Err(get_error(ErrorDef::UnexpectedEntry {
+                                             expected: TokenTypeDef::Key,
+                                             found: get_token_def(&token.1),
+                                         },
+                                         Some(token.0)))
+                }
+            }
+        }
+
+
+        // let entries = self.get_multiple_sets_of_values()?;
+
+        // result.insert("oauth_2_0".to_string(),
+        //               SecurityScheme { security_type: SecuritySchemeType::OAuth2 });
+
+        Ok(result)
+    }
+
+    fn get_security_scheme(&mut self) -> Result<SecurityScheme, RamlError> {
+        let mut security_type: Option<SecuritySchemeType> = None;
+        self.expect(TokenTypeDef::Value)?;
+        self.expect(TokenTypeDef::BlockMappingStart)?;
+        loop {
+            let token = self.next_token();
+            match token.1 {
+                TokenType::Key => {
+                    let token = self.next_token();
+                    match token.1 {
+                        TokenType::Scalar(_, ref v) if v == "type" => {
+                            let security_type_str = self.get_single_value()?;
+                            security_type = Some(security_type_str.parse::<SecuritySchemeType>()?);
+                        }
+                        TokenType::Scalar(_, v) => {
+                            return Err(get_error(ErrorDef::UnexpectedKeyRoot {
+                                                     field: v,
+                                                     level: HierarchyLevel::DocumentRoot,
+                                                 },
+                                                 Some(token.0)));
+                        }
+                        _ => {
+                            return Err(get_error(ErrorDef::UnexpectedEntry {
+                                                     expected: TokenTypeDef::Scalar,
+                                                     found: get_token_def(&token.1),
+                                                 },
+                                                 Some(token.0)))
+                        }
+                    }
+                }
+                TokenType::BlockEnd => {
+                    if self.raml.title.is_empty() {
+                        return Err(get_error(ErrorDef::MissingField {
+                                                 field: "title".to_string(),
+                                                 level: HierarchyLevel::DocumentRoot,
+                                             },
+                                             None));
+                    } else {
+                        break;
+                    }
+                }
+                _ => {
+                    return Err(get_error(ErrorDef::UnexpectedEntry {
+                                             expected: TokenTypeDef::Key,
+                                             found: get_token_def(&token.1),
+                                         },
+                                         Some(token.0)))
+                }
+            }
+        }
+
+        Ok(SecurityScheme { security_type: security_type.unwrap() })
     }
 
     fn get_single_or_multiple_values(&mut self) -> Result<FlowSequenceEntries, RamlError> {
