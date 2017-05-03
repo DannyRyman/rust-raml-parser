@@ -1,7 +1,8 @@
 extern crate yaml_rust;
 
-mod token_type_definitions;
 mod error_definitions;
 mod parser;
+mod yaml;
 
-pub use parser::{Protocol, Raml, RamlParser, RamlResult, RamlDocumentation, SecuritySchemeType};
+pub use parser::RamlParser;
+pub use parser::{Protocol, Raml, RamlResult, RamlDocumentation, SecuritySchemeType};

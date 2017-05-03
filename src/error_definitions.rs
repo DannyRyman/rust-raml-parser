@@ -1,4 +1,4 @@
-use token_type_definitions::TokenTypeDef;
+use yaml::TokenTypeDef;
 use yaml_rust::scanner::{Marker, ScanError};
 use std::fmt;
 

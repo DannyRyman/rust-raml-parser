@@ -1,8 +1,8 @@
-use yaml_rust::scanner::{Scanner, TokenType, Token, Marker};
-use std::str::{Chars, FromStr};
+use yaml_rust::scanner::TokenType;
 use error_definitions::{ErrorDef, RamlError, get_error, HierarchyLevel};
-use token_type_definitions::{TokenTypeDef, get_token_def};
 use std::collections::HashMap;
+use yaml::*;
+use std::str::FromStr;
 
 pub type RamlResult = Result<Raml, RamlError>;
 
@@ -22,15 +22,10 @@ pub struct Raml {
     version: Option<String>,
     description: Option<String>,
     base_uri: Option<String>,
-    protocols: Option<Vec<Protocol>>,
-    media_types: Option<Vec<String>>,
-    documentation: Option<Vec<RamlDocumentation>>,
+    protocols: Option<Protocols>,
+    media_types: Option<MediaTypes>,
+    documentation: Option<RamlDocumentationEntries>,
     security_schemes: Option<SecuritySchemes>,
-}
-
-struct KeyValue {
-    key: String,
-    value: String,
 }
 
 #[derive(Debug)]
@@ -40,6 +35,8 @@ pub struct RamlDocumentation {
     content: String,
 }
 
+pub type RamlDocumentationEntries = Vec<RamlDocumentation>;
+
 impl RamlDocumentation {
     pub fn new(title: String, content: String) -> RamlDocumentation {
         RamlDocumentation {
@@ -47,9 +44,15 @@ impl RamlDocumentation {
             content: content,
         }
     }
-}
 
-type FlowSequenceEntries = Vec<FlowSequenceEntry>;
+    pub fn title(&self) -> &str {
+        self.title.as_str()
+    }
+
+    pub fn content(&self) -> &str {
+        self.content.as_str()
+    }
+}
 
 pub type SecuritySchemes = HashMap<String, SecurityScheme>;
 
@@ -86,21 +89,33 @@ pub struct SecurityScheme {
     pub security_type: SecuritySchemeType,
 }
 
-type BlockSequenceEntries = HashMap<String, BlockSequenceEntry>;
+pub type MediaTypes = Vec<String>;
 
-struct BlockSequenceEntry {
-    value: String,
-    marker: Marker,
-}
-
-type VectorOfBlockSequenceEntries = Vec<BlockSequenceEntries>;
-
-struct FlowSequenceEntry {
-    value: String,
-    marker: Marker,
+pub struct RamlArgs {
+    pub title: String,
+    pub version: Option<String>,
+    pub description: Option<String>,
+    pub base_uri: Option<String>,
+    pub protocols: Option<Vec<Protocol>>,
+    pub media_types: Option<Vec<String>>,
+    pub documentation: Option<Vec<RamlDocumentation>>,
+    pub security_schemes: Option<SecuritySchemes>,
 }
 
 impl Raml {
+    pub fn new(args: RamlArgs) -> Raml {
+        Raml {
+            title: args.title,
+            version: args.version,
+            description: args.description,
+            base_uri: args.base_uri,
+            protocols: args.protocols,
+            media_types: args.media_types,
+            documentation: args.documentation,
+            security_schemes: args.security_schemes,
+        }
+    }
+
     pub fn title(&self) -> &str {
         self.title.as_str()
     }
@@ -117,11 +132,11 @@ impl Raml {
         self.base_uri
     }
 
-    pub fn protocols(self) -> Option<Vec<Protocol>> {
+    pub fn protocols(self) -> Option<Protocols> {
         self.protocols
     }
 
-    pub fn media_types(self) -> Option<Vec<String>> {
+    pub fn media_types(self) -> Option<MediaTypes> {
         self.media_types
     }
 
@@ -134,36 +149,6 @@ impl Raml {
     }
 }
 
-struct ForwardCursor<'a> {
-    scanner: Scanner<Chars<'a>>,
-}
-
-impl<'a> ForwardCursor<'a> {
-    fn new(source: &str) -> ForwardCursor {
-        ForwardCursor { scanner: Scanner::new(source.chars()) }
-    }
-
-    fn next_token(&mut self) -> Token {
-        // todo error handling
-        self.scanner.next().unwrap()
-        // let token_def = get_token_def(&token.1);
-        // println!("Token {}", token_def);
-    }
-
-    fn expect(&mut self, expected_token_type: TokenTypeDef) -> Result<(), RamlError> {
-        let token = self.next_token();
-        let found_token_type = get_token_def(&token.1);
-        if found_token_type == expected_token_type {
-            Ok(())
-        } else {
-            Err(get_error(ErrorDef::UnexpectedEntry {
-                              expected: expected_token_type,
-                              found: found_token_type,
-                          },
-                          Some(token.0)))
-        }
-    }
-}
 
 fn print_tokens(source: &str) {
     let mut cursor = ForwardCursor::new(source);
@@ -182,155 +167,6 @@ fn parse_raml_string(source: &str) -> RamlResult {
     parse_root(&mut cursor)
 }
 
-fn get_scalar_value(cursor: &mut ForwardCursor) -> Result<String, RamlError> {
-    let token = cursor.next_token();
-    match token.1 {
-        TokenType::Scalar(_, ref v) => Ok(v.clone()),
-        _ => {
-            Err(get_error(ErrorDef::UnexpectedEntry {
-                              expected: TokenTypeDef::Scalar,
-                              found: get_token_def(&token.1),
-                          },
-                          Some(token.0)))
-        }
-    }
-}
-
-fn get_flow_sequence(cursor: &mut ForwardCursor) -> Result<FlowSequenceEntries, RamlError> {
-    let mut values = vec![];
-    loop {
-        let token = cursor.next_token();
-        match token.1 {
-            TokenType::Scalar(_, s) => {
-                values.push(FlowSequenceEntry {
-                    value: s,
-                    marker: token.0,
-                });
-            }
-            TokenType::FlowEntry => {
-                // ignore
-            }
-            TokenType::FlowSequenceEnd => break,
-            _ => {
-                return Err(get_error(ErrorDef::UnexpectedEntryMulti {
-                                         expected: vec![TokenTypeDef::FlowEntry,
-                                                        TokenTypeDef::FlowSequenceEnd],
-                                         found: get_token_def(&token.1),
-                                     },
-                                     Some(token.0)))
-            }
-        }
-    }
-
-    Ok(values)
-}
-
-fn get_multiple_values(cursor: &mut ForwardCursor) -> Result<FlowSequenceEntries, RamlError> {
-    cursor.expect(TokenTypeDef::Value)?;
-    cursor.expect(TokenTypeDef::FlowSequenceStart)?;
-    get_flow_sequence(cursor)
-}
-
-fn get_multiple_sets_of_values(cursor: &mut ForwardCursor)
-                               -> Result<VectorOfBlockSequenceEntries, RamlError> {
-    cursor.expect(TokenTypeDef::Value)?;
-    cursor.expect(TokenTypeDef::BlockSequenceStart)?;
-    get_block_sequences(cursor)
-}
-
-fn get_single_value(cursor: &mut ForwardCursor) -> Result<String, RamlError> {
-    cursor.expect(TokenTypeDef::Value)?;
-    get_scalar_value(cursor)
-}
-
-fn get_block_sequences(cursor: &mut ForwardCursor)
-                       -> Result<VectorOfBlockSequenceEntries, RamlError> {
-    let mut result: VectorOfBlockSequenceEntries = Vec::new();
-    loop {
-        let token = cursor.next_token();
-        match token.1 {
-            TokenType::BlockEntry => {
-                let block_sequence = get_block_sequence(cursor)?;
-                result.push(block_sequence);
-            }
-            TokenType::BlockEnd => {
-                break;
-            }
-            _ => {
-                return Err(get_error(ErrorDef::UnexpectedEntryMulti {
-                                         expected: vec![TokenTypeDef::BlockEntry,
-                                                        TokenTypeDef::BlockEnd],
-                                         found: get_token_def(&token.1),
-                                     },
-                                     Some(token.0)))
-            }
-        }
-    }
-    Ok(result)
-}
-
-fn get_key_value(cursor: &mut ForwardCursor) -> Result<KeyValue, RamlError> {
-    let key = get_scalar_value(cursor)?;
-    cursor.expect(TokenTypeDef::Value)?;
-    let value = get_scalar_value(cursor)?;
-    Ok(KeyValue {
-        key: key,
-        value: value,
-    })
-}
-
-fn get_block_sequence(cursor: &mut ForwardCursor) -> Result<BlockSequenceEntries, RamlError> {
-    let mut result: BlockSequenceEntries = HashMap::new();
-    cursor.expect(TokenTypeDef::BlockMappingStart)?;
-    loop {
-        let token = cursor.next_token();
-        match token.1 {
-            TokenType::Key => {
-                let key_value = get_key_value(cursor)?;
-                result.insert(key_value.key,
-                              BlockSequenceEntry {
-                                  value: key_value.value,
-                                  marker: token.0,
-                              });
-            }
-            TokenType::BlockEnd => {
-                break;
-            }
-            _ => {
-                return Err(get_error(ErrorDef::UnexpectedEntryMulti {
-                                         expected: vec![TokenTypeDef::Key, TokenTypeDef::BlockEnd],
-                                         found: get_token_def(&token.1),
-                                     },
-                                     Some(token.0)))
-            }
-        }
-    }
-    Ok(result)
-}
-
-fn get_single_or_multiple_values(cursor: &mut ForwardCursor)
-                                 -> Result<FlowSequenceEntries, RamlError> {
-    cursor.expect(TokenTypeDef::Value)?;
-
-    let token = cursor.next_token();
-    match token.1 {
-        TokenType::Scalar(_, v) => {
-            Ok(vec![FlowSequenceEntry {
-                        value: v,
-                        marker: token.0,
-                    }])
-        }
-        TokenType::FlowSequenceStart => get_flow_sequence(cursor),
-        _ => {
-            Err(get_error(ErrorDef::UnexpectedEntryMulti {
-                              expected: vec![TokenTypeDef::Scalar, TokenTypeDef::FlowSequenceStart],
-                              found: get_token_def(&token.1),
-                          },
-                          Some(token.0)))
-        }
-    }
-}
-
 fn get_protocols(cursor: &mut ForwardCursor) -> Result<Protocols, RamlError> {
     let protocols = get_multiple_values(cursor)?;
     if protocols.is_empty() {
@@ -347,8 +183,6 @@ fn get_protocols(cursor: &mut ForwardCursor) -> Result<Protocols, RamlError> {
     Ok(protocols?)
 }
 
-pub type MediaTypes = Vec<String>;
-
 fn get_media_types(cursor: &mut ForwardCursor) -> Result<MediaTypes, RamlError> {
     let media_types = get_single_or_multiple_values(cursor)
         ?
@@ -357,8 +191,6 @@ fn get_media_types(cursor: &mut ForwardCursor) -> Result<MediaTypes, RamlError> 
         .collect();
     Ok(media_types)
 }
-
-pub type RamlDocumentationEntries = Vec<RamlDocumentation>;
 
 fn get_documentation(cursor: &mut ForwardCursor) -> Result<RamlDocumentationEntries, RamlError> {
     let documentation_result: Result<RamlDocumentationEntries, RamlError> =
@@ -390,10 +222,7 @@ fn get_documentation(cursor: &mut ForwardCursor) -> Result<RamlDocumentationEntr
                                          },
                                          None));
                 }
-                Ok(RamlDocumentation {
-                    title: title.unwrap(),
-                    content: content.unwrap(),
-                })
+                Ok(RamlDocumentation::new(title.unwrap(), content.unwrap()))
             })
             .collect();
 
@@ -568,7 +397,7 @@ fn parse_root(cursor: &mut ForwardCursor) -> RamlResult {
             }
         }
     }
-    Ok(Raml {
+    Ok(Raml::new(RamlArgs {
         title: title.unwrap(),
         version: version,
         description: description,
@@ -577,7 +406,7 @@ fn parse_root(cursor: &mut ForwardCursor) -> RamlResult {
         media_types: media_types,
         documentation: documentation,
         security_schemes: security_schemes,
-    })
+    }))
 }
 
 fn error_if_incorrect_raml_comment(s: &str) -> Result<(), RamlError> {
