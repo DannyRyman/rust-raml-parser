@@ -87,6 +87,8 @@ impl FromStr for SecuritySchemeType {
 #[derive(Debug)]
 pub struct SecurityScheme {
     pub security_type: SecuritySchemeType,
+    pub display_name: Option<String>,
+    pub description: Option<String>,
 }
 
 pub type MediaTypes = Vec<String>;
@@ -276,6 +278,8 @@ fn get_security_schemes(cursor: &mut ForwardCursor) -> Result<SecuritySchemes, R
 
 fn get_security_scheme(cursor: &mut ForwardCursor) -> Result<SecurityScheme, RamlError> {
     let mut security_type: Option<SecuritySchemeType> = None;
+    let mut display_name: Option<String> = None;
+    let mut description: Option<String> = None;
     cursor.expect(TokenTypeDef::Value)?;
     cursor.expect(TokenTypeDef::BlockMappingStart)?;
     loop {
@@ -287,6 +291,12 @@ fn get_security_scheme(cursor: &mut ForwardCursor) -> Result<SecurityScheme, Ram
                     TokenType::Scalar(_, ref v) if v == "type" => {
                         let security_type_str = get_single_value(cursor)?;
                         security_type = Some(security_type_str.parse::<SecuritySchemeType>()?);
+                    }
+                    TokenType::Scalar(_, ref v) if v == "displayName" => {
+                        display_name = Some(get_single_value(cursor)?);
+                    }
+                    TokenType::Scalar(_, ref v) if v == "description" => {
+                        description = Some(get_single_value(cursor)?);
                     }
                     TokenType::Scalar(_, v) => {
                         return Err(get_error(ErrorDef::UnexpectedKeyRoot {
@@ -317,7 +327,11 @@ fn get_security_scheme(cursor: &mut ForwardCursor) -> Result<SecurityScheme, Ram
         }
     }
 
-    Ok(SecurityScheme { security_type: security_type.unwrap() })
+    Ok(SecurityScheme {
+        security_type: security_type.unwrap(),
+        display_name: display_name,
+        description: description,
+    })
 }
 
 fn parse_root(cursor: &mut ForwardCursor) -> RamlResult {
