@@ -69,14 +69,13 @@ securitySchemes:";
                          at line 4 column 1")
 }
 
-
-/*
 #[test]
 fn error_if_missing_type() {
     let s = "#%RAML 1.0
 title: Some API
 securitySchemes:
-  oauth_2_0:";
+  oauth_2_0:
+    displayName: sample display name";
     let result = parse(s);
     assert_error_result(result, "Error parsing security scheme. Missing field: type")
-}*/
+}

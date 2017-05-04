@@ -327,6 +327,14 @@ fn get_security_scheme(cursor: &mut ForwardCursor) -> Result<SecurityScheme, Ram
         }
     }
 
+    if security_type.is_none() {
+        return Err(get_error(ErrorDef::MissingField {
+                                 field: "type".to_string(),
+                                 level: HierarchyLevel::SecurityScheme,
+                             },
+                             None));
+    }
+
     Ok(SecurityScheme {
         security_type: security_type.unwrap(),
         display_name: display_name,

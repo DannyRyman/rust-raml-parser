@@ -6,6 +6,7 @@ use std::fmt;
 pub enum HierarchyLevel {
     DocumentRoot,
     Documentation,
+    SecurityScheme,
 }
 
 impl fmt::Display for HierarchyLevel {
@@ -13,6 +14,7 @@ impl fmt::Display for HierarchyLevel {
         let printable = match *self {
             HierarchyLevel::DocumentRoot => "document root",
             HierarchyLevel::Documentation => "documentation",
+            HierarchyLevel::SecurityScheme => "security scheme",
         };
         write!(f, "{}", printable)
     }
