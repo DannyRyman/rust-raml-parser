@@ -91,6 +91,10 @@ pub struct SecurityScheme {
     pub description: Option<String>,
 }
 
+#[derive(PartialEq)]
+#[derive(Debug)]
+pub struct SecuritySchemeDescribedBy {}
+
 pub type MediaTypes = Vec<String>;
 
 pub struct RamlArgs {
@@ -276,10 +280,18 @@ fn get_security_schemes(cursor: &mut ForwardCursor) -> Result<SecuritySchemes, R
     Ok(result)
 }
 
+fn get_security_scheme_described_by(cursor: &mut ForwardCursor)
+                                    -> Result<SecuritySchemeDescribedBy, RamlError> {
+    cursor.expect(TokenTypeDef::Value)?;
+    cursor.expect(TokenTypeDef::BlockMappingStart)?;
+    Ok(SecuritySchemeDescribedBy {})
+}
+
 fn get_security_scheme(cursor: &mut ForwardCursor) -> Result<SecurityScheme, RamlError> {
     let mut security_type: Option<SecuritySchemeType> = None;
     let mut display_name: Option<String> = None;
     let mut description: Option<String> = None;
+    let mut describedBy: Option<SecuritySchemeDescribedBy> = None;
     cursor.expect(TokenTypeDef::Value)?;
     cursor.expect(TokenTypeDef::BlockMappingStart)?;
     loop {
@@ -298,10 +310,13 @@ fn get_security_scheme(cursor: &mut ForwardCursor) -> Result<SecurityScheme, Ram
                     TokenType::Scalar(_, ref v) if v == "description" => {
                         description = Some(get_single_value(cursor)?);
                     }
+                    TokenType::Scalar(_, ref v) if v == "describedBy" => {
+                        describedBy = Some(get_security_scheme_described_by(cursor)?);
+                    }
                     TokenType::Scalar(_, v) => {
                         return Err(get_error(ErrorDef::UnexpectedKeyRoot {
                                                  field: v,
-                                                 level: HierarchyLevel::DocumentRoot,
+                                                 level: HierarchyLevel::SecurityScheme,
                                              },
                                              Some(token.0)));
                     }

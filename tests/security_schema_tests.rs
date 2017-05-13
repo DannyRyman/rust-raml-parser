@@ -79,3 +79,19 @@ securitySchemes:
     let result = parse(s);
     assert_error_result(result, "Error parsing security scheme. Missing field: type")
 }
+
+#[test]
+fn if_described_by_is_specified_it_must_have_entries() {
+    let s = "#%RAML 1.0
+title: Some API
+securitySchemes:
+  oauth_2_0:
+    describedBy:";
+    let result = parse(s);
+    assert_error_result(result,
+                        "Unexpected entry found. Expected Block-Mapping-Start, Found Block-End \
+                         at line 6 column 1")
+}
+
+#[test]
+fn valid_described_by_headers() {}
